@@ -1,0 +1,23 @@
+---
+pid: 9880
+cwd: "D:\1-dev\ecommerce-1"
+command: "Set-Location D:\\1-dev\\ecommerce-1; npm.cmd run dev"
+started_at: 2026-06-07T10:04:46.290Z
+running_for_ms: 550007   
+---
+
+> vela-store@1.0.0 dev
+> vite
+
+Port 5173 is in use, trying another one...
+
+  VITE v6.4.3  ready in 176 ms
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: use --host to expose
+5:05:20 PM [vite] vite.config.js changed, restarting server...
+5:05:20 PM [vite] (client) hmr update /src/pages/AboutPage.jsx, /src/pages/ShopPage.jsx, /src/pages/ContactPage.jsx, /src/components/layout/AnnouncementBar.jsx, /src/components/layout/PageTransition.jsx, /src/components/layout/Header.jsx, /src/components/layout/Footer.jsx, /src/components/sections/ProductGrid.jsx, /src/components/sections/StorySection.jsx, /src/components/sections/Hero.jsx
+5:05:20 PM [vite] (client) hmr update /src/pages/TrackPage.jsx
+5:05:20 PM [vite] (client) hmr update /src/App.jsx
+5:05:20 PM [vite] (client) page reload src/main.jsx
+5:05:20 PM [vite] server restarted.
