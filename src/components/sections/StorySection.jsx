@@ -17,9 +17,10 @@ export default function StorySection() {
       <div className="story__visual">
         <motion.img
           src={story.image}
-          alt="VELA studio"
+          alt="Studio VELA Jakarta — ruang desain dan fitting"
           className="story__image"
           style={{ y: imageY }}
+          loading="lazy"
         />
         <span className="story__caption">{story.caption}</span>
       </div>

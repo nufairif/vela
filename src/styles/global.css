@@ -1012,13 +1012,20 @@ ul { list-style: none; }
   position: relative;
   border-radius: var(--radius-lg);
   overflow: hidden;
+  aspect-ratio: 4 / 5;
+  background: var(--bg-card);
 }
 
 .story__visual img,
 .story__image {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  aspect-ratio: 4 / 5;
+  height: 120%;
   object-fit: cover;
+  object-position: center 35%;
+  display: block;
+  will-change: transform;
 }
 
 .story__content {

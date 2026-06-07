@@ -10,7 +10,7 @@ export default function PageHero({ eyebrow, title, subtitle, image, compact = fa
       </ScrollReveal>
       {image && (
         <ScrollReveal delay={0.1} className="page-hero__image">
-          <img src={image} alt="" loading="lazy" />
+          <img src={image} alt={title} loading="lazy" />
         </ScrollReveal>
       )}
     </section>
