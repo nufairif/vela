@@ -22,14 +22,6 @@ export default function Header({ onCartOpen, cartOpen, onCartClose }) {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const handleCartOpen = () => {
-    if (!isLoggedIn) {
-      navigate(loginPath(location.pathname, { openCart: true }))
-      return
-    }
-    onCartOpen()
-  }
-
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -58,11 +50,19 @@ export default function Header({ onCartOpen, cartOpen, onCartClose }) {
     navigate(`/products/${id}`)
   }
 
+  const goToSearch = () => {
+    const q = searchQuery.trim()
+    if (!q) return
+    setSearchOpen(false)
+    navigate(`/search?q=${encodeURIComponent(q)}`)
+    setSearchQuery('')
+  }
+
   return (
     <>
       <header className={`site-header ${scrolled ? 'site-header--scrolled' : ''}`}>
         <div className="site-header__inner">
-          <button className="site-header__menu" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+          <button className="site-header__menu" onClick={() => setMenuOpen(true)} aria-label="Buka menu">
             <span /><span />
           </button>
 
@@ -102,10 +102,10 @@ export default function Header({ onCartOpen, cartOpen, onCartClose }) {
               <HeartIcon />
               {wishlistCount > 0 && <span className="site-header__cart-count">{wishlistCount}</span>}
             </Link>
-            <button onClick={() => setSearchOpen(true)} aria-label="Search" className="site-header__action">
+            <button onClick={() => setSearchOpen(true)} aria-label="Cari" className="site-header__action">
               <SearchIcon />
             </button>
-            <button onClick={handleCartOpen} aria-label="Cart" className="site-header__action">
+            <button onClick={onCartOpen} aria-label="Keranjang" className="site-header__action">
               <CartIcon />
               {count > 0 && <span className="site-header__cart-count">{count}</span>}
             </button>
@@ -124,29 +124,35 @@ export default function Header({ onCartOpen, cartOpen, onCartClose }) {
             <div className="search-panel__inner">
               <input
                 type="search"
-                placeholder="Search products..."
+                placeholder="Cari produk..."
                 autoFocus
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && goToSearch()}
               />
-              <button onClick={() => { setSearchOpen(false); setSearchQuery('') }} aria-label="Close">
+              <button onClick={() => { setSearchOpen(false); setSearchQuery('') }} aria-label="Tutup">
                 <CloseIcon />
               </button>
             </div>
             {searchQuery.trim() && (
               <div className="search-panel__results">
                 {searchResults.length > 0 ? (
-                  searchResults.map((p) => (
-                    <button key={p.id} className="search-panel__result" onClick={() => goToProduct(p.id)}>
-                      <img src={p.image} alt="" />
-                      <div>
-                        <span>{p.name}</span>
-                        <small>{p.priceLabel}</small>
-                      </div>
+                  <>
+                    {searchResults.map((p) => (
+                      <button key={p.id} className="search-panel__result" onClick={() => goToProduct(p.id)}>
+                        <img src={p.image} alt="" />
+                        <div>
+                          <span>{p.name}</span>
+                          <small>{p.priceLabel}</small>
+                        </div>
+                      </button>
+                    ))}
+                    <button className="search-panel__view-all" onClick={goToSearch}>
+                      Lihat semua hasil untuk &ldquo;{searchQuery.trim()}&rdquo;
                     </button>
-                  ))
+                  </>
                 ) : (
-                  <p className="search-panel__empty">No products found</p>
+                  <p className="search-panel__empty">Produk tidak ditemukan</p>
                 )}
               </div>
             )}
@@ -199,11 +205,11 @@ export default function Header({ onCartOpen, cartOpen, onCartClose }) {
         </nav>
       </Drawer>
 
-      <Drawer isOpen={cartOpen} onClose={onCartClose} title="Bag">
+      <Drawer isOpen={cartOpen} onClose={onCartClose} title="Keranjang">
         {items.length === 0 ? (
           <div className="cart-empty">
-            <p>Your bag is empty</p>
-            <Link to="/shop" className="btn btn--ghost" onClick={onCartClose}>Start Shopping</Link>
+            <p>Keranjang Anda kosong</p>
+            <Link to="/shop" className="btn btn--ghost" onClick={onCartClose}>Mulai Belanja</Link>
           </div>
         ) : (
           <div className="cart-drawer">
@@ -218,12 +224,12 @@ export default function Header({ onCartOpen, cartOpen, onCartClose }) {
                         {[item.color, item.size].filter(Boolean).join(' · ')}
                       </small>
                     )}
-                    <small>Qty {item.qty} · {item.product.priceLabel}</small>
+                    <small>Jml {item.qty} · {item.product.priceLabel}</small>
                   </div>
                   <button
                     className="cart-drawer__remove"
                     onClick={() => removeItem(item.key)}
-                    aria-label="Remove item"
+                    aria-label="Hapus item"
                   >
                     ×
                   </button>
@@ -235,11 +241,15 @@ export default function Header({ onCartOpen, cartOpen, onCartClose }) {
                 <span>Subtotal</span>
                 <span>{formatPrice(subtotal)}</span>
               </div>
-              <Link to="/checkout" className="btn btn--primary" onClick={onCartClose}>
+              <Link
+                to={isLoggedIn ? '/checkout' : loginPath('/checkout')}
+                className="btn btn--primary"
+                onClick={onCartClose}
+              >
                 Checkout
               </Link>
               <Link to="/shop" className="btn btn--ghost cart-drawer__continue" onClick={onCartClose}>
-                Continue Shopping
+                Lanjut Belanja
               </Link>
             </div>
           </div>

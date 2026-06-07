@@ -20,6 +20,7 @@ import AccountAddresses from './pages/account/AccountAddresses'
 import AccountSettings from './pages/account/AccountSettings'
 import AccountOrderTrack from './pages/account/AccountOrderTrack'
 import TrackPage from './pages/TrackPage'
+import SearchPage from './pages/SearchPage'
 import WishlistPage from './pages/WishlistPage'
 import HelpPage from './pages/HelpPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
       { path: 'journal', element: <JournalPage /> },
       { path: 'journal/:slug', element: <JournalArticlePage /> },
       { path: 'contact', element: <ContactPage /> },
+      { path: 'search', element: <SearchPage /> },
       { path: 'checkout', element: <CheckoutPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },

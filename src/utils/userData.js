@@ -93,3 +93,43 @@ export function getOrderById(email, orderId) {
   if (!email || !orderId) return null
   return loadOrders(email).find((order) => order.id === orderId) || null
 }
+
+export function cancelOrder(email, orderId) {
+  if (!email || !orderId) return { ok: false, error: 'Pesanan tidak ditemukan.' }
+
+  const orders = loadOrders(email)
+  const idx = orders.findIndex((o) => o.id === orderId)
+  if (idx === -1) return { ok: false, error: 'Pesanan tidak ditemukan.' }
+
+  const order = orders[idx]
+  if (order.status !== 'processing') {
+    return { ok: false, error: 'Hanya pesanan berstatus Diproses yang bisa dibatalkan.' }
+  }
+
+  const cancelled = {
+    ...order,
+    status: 'cancelled',
+    statusLabel: 'Dibatalkan',
+    cancelledAt: new Date().toISOString(),
+    tracking: order.tracking
+      ? {
+          ...order.tracking,
+          manifest: [
+            ...(order.tracking.manifest || []),
+            {
+              code: 'CANCELLED',
+              description: 'Pesanan dibatalkan oleh pelanggan',
+              date: new Date().toISOString().split('T')[0],
+              time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+              city: order.customer?.city || 'Jakarta',
+            },
+          ],
+        }
+      : order.tracking,
+  }
+
+  const next = [...orders]
+  next[idx] = cancelled
+  saveOrders(email, next)
+  return { ok: true, order: cancelled }
+}

@@ -418,6 +418,24 @@ ul { list-style: none; }
   color: var(--text-muted);
 }
 
+.search-panel__view-all {
+  display: block;
+  width: 100%;
+  padding: 16px 24px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.search-panel__view-all:hover {
+  background: var(--bg);
+}
+
 .search-panel__empty {
   padding: 20px;
   text-align: center;

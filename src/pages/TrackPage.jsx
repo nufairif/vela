@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { usePageSeo } from '../hooks/usePageSeo'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { demoUser } from '../data/seed'
@@ -10,6 +11,8 @@ import PageHero from '../components/ui/PageHero'
 import ScrollReveal from '../components/ui/ScrollReveal'
 
 export default function TrackPage() {
+  usePageSeo('Lacak Paket', 'Lacak status pengiriman pesanan VELA dengan nomor resi atau ID pesanan.')
+
   const { isLoggedIn, user } = useAuth()
   const [query, setQuery] = useState('')
   const [email, setEmail] = useState(isLoggedIn ? user?.email || demoUser.email : demoUser.email)

@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { loadOrders } from '../../utils/userData'
+import { loadOrders, cancelOrder } from '../../utils/userData'
 import { formatPrice } from '../../utils/currency'
 import { getProductById } from '../../data/products'
 import ScrollReveal from '../../components/ui/ScrollReveal'
@@ -20,7 +21,22 @@ const paymentLabels = {
 
 export default function AccountOrders() {
   const { user } = useAuth()
-  const orders = loadOrders(user.email)
+  const [orders, setOrders] = useState(() => loadOrders(user.email))
+  const [cancellingId, setCancellingId] = useState(null)
+  const [cancelError, setCancelError] = useState('')
+
+  const handleCancel = (orderId) => {
+    if (!window.confirm('Batalkan pesanan ini? Tindakan ini tidak dapat dibatalkan.')) return
+
+    const result = cancelOrder(user.email, orderId)
+    if (!result.ok) {
+      setCancelError(result.error)
+      return
+    }
+    setCancelError('')
+    setCancellingId(null)
+    setOrders(loadOrders(user.email))
+  }
 
   return (
     <div className="account-panel">
@@ -31,6 +47,10 @@ export default function AccountOrders() {
           <p>Lacak dan lihat detail semua pesanan Anda.</p>
         </header>
       </ScrollReveal>
+
+      {cancelError && (
+        <p className="account-form__error">{cancelError}</p>
+      )}
 
       {orders.length === 0 ? (
         <ScrollReveal delay={0.06}>
@@ -70,7 +90,7 @@ export default function AccountOrders() {
                         <div>
                           <Link to={`/products/${product.id}`}>{product.name}</Link>
                           <small>
-                            {[item.color, item.size].filter(Boolean).join(' · ')} · Qty {item.qty}
+                            {[item.color, item.size].filter(Boolean).join(' · ')} · Jml {item.qty}
                           </small>
                         </div>
                         <span>{formatPrice(item.price * item.qty)}</span>
@@ -79,7 +99,7 @@ export default function AccountOrders() {
                   })}
                 </ul>
 
-                {order.tracking?.awb && (
+                {order.tracking?.awb && order.status !== 'cancelled' && (
                   <p className="account-order-card__awb">
                     Resi: <strong>{order.tracking.awb}</strong> · {order.tracking.courierName}
                   </p>
@@ -88,7 +108,35 @@ export default function AccountOrders() {
                 <div className="account-order-card__footer">
                   <div className="account-order-card__actions">
                     <span>{paymentLabels[order.payment] || order.payment}</span>
-                    {order.tracking && (
+                    {order.status === 'processing' && (
+                      cancellingId === order.id ? (
+                        <div className="account-order-card__cancel-confirm">
+                          <button
+                            type="button"
+                            className="btn btn--ghost account-order-card__cancel"
+                            onClick={() => handleCancel(order.id)}
+                          >
+                            Ya, batalkan
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--ghost"
+                            onClick={() => setCancellingId(null)}
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn--ghost account-order-card__cancel"
+                          onClick={() => setCancellingId(order.id)}
+                        >
+                          Batalkan Pesanan
+                        </button>
+                      )
+                    )}
+                    {order.tracking && order.status !== 'cancelled' && (
                       <Link
                         to={`/account/orders/${order.id}/track`}
                         className="btn btn--ghost account-order-card__track"
@@ -99,6 +147,9 @@ export default function AccountOrders() {
                   </div>
                   <div className="account-order-card__totals">
                     <small>Subtotal {formatPrice(order.subtotal)}</small>
+                    {order.discount > 0 && (
+                      <small>Diskon −{formatPrice(order.discount)}</small>
+                    )}
                     <small>
                       Ongkir {order.shipping === 0 ? 'Gratis' : formatPrice(order.shipping)}
                     </small>

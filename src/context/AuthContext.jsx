@@ -1,6 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { ensureDemoUser, seedDemoUserData, syncDemoSeedIfNeeded } from '../utils/seed'
 import { loadProfile, saveProfile } from '../utils/userData'
+import {
+  GUEST_CART_KEY,
+  cartKey,
+  loadCartFromStorage,
+  saveCartToStorage,
+  mergeCartItems,
+} from '../utils/cartStorage'
 
 const USERS_KEY = 'vela_users'
 const SESSION_KEY = 'vela_session'
@@ -46,6 +53,16 @@ export function AuthProvider({ children }) {
     }
   }, [syncProfile])
 
+  const mergeGuestCart = useCallback((email) => {
+    const guestItems = loadCartFromStorage(GUEST_CART_KEY)
+    if (guestItems.length === 0) return
+
+    const userItems = loadCartFromStorage(cartKey(email))
+    const merged = mergeCartItems(userItems, guestItems)
+    saveCartToStorage(cartKey(email), merged)
+    localStorage.removeItem(GUEST_CART_KEY)
+  }, [])
+
   const register = useCallback(({ name, email, password }) => {
     const users = loadUsers()
     if (users.some((u) => u.email === email)) {
@@ -54,12 +71,13 @@ export function AuthProvider({ children }) {
     const newUser = { name, email, password }
     saveUsers([...users, newUser])
     saveProfile(email, { phone: '', notifications: { email: true, sms: false } })
+    mergeGuestCart(email)
     const session = { name, email }
     localStorage.setItem(SESSION_KEY, JSON.stringify(session))
     setUser(session)
     syncProfile(email)
     return { ok: true }
-  }, [syncProfile])
+  }, [syncProfile, mergeGuestCart])
 
   const login = useCallback(({ email, password }) => {
     const found = loadUsers().find((u) => u.email === email)
@@ -67,12 +85,13 @@ export function AuthProvider({ children }) {
       return { ok: false, error: 'Email atau password salah.' }
     }
     seedDemoUserData(found.email)
+    mergeGuestCart(found.email)
     const session = { name: found.name, email: found.email }
     localStorage.setItem(SESSION_KEY, JSON.stringify(session))
     setUser(session)
     syncProfile(found.email)
     return { ok: true }
-  }, [syncProfile])
+  }, [syncProfile, mergeGuestCart])
 
   const logout = useCallback(() => {
     localStorage.removeItem(SESSION_KEY)

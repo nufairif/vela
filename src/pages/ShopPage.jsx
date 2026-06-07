@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { usePageSeo } from '../hooks/usePageSeo'
 import { products } from '../data/products'
 import { productFilters } from '../data/site'
 import ProductCard from '../components/product/ProductCard'
@@ -7,10 +8,10 @@ import ScrollReveal from '../components/ui/ScrollReveal'
 import PageShell from '../components/layout/PageShell'
 
 const sortOptions = [
-  { id: 'newest', label: 'Newest' },
-  { id: 'price-asc', label: 'Price: Low' },
-  { id: 'price-desc', label: 'Price: High' },
-  { id: 'name', label: 'Name' },
+  { id: 'newest', label: 'Terbaru' },
+  { id: 'price-asc', label: 'Harga: Rendah' },
+  { id: 'price-desc', label: 'Harga: Tinggi' },
+  { id: 'name', label: 'Nama' },
 ]
 
 export default function ShopPage() {
@@ -34,14 +35,16 @@ export default function ShopPage() {
     }
   }, [activeFilter, sort])
 
+  usePageSeo('Toko', 'Jelajahi koleksi lengkap VELA — pakaian esensial yang dirancang untuk bertahan melewati musim.')
+
   return (
     <PageShell>
     <div className="page shop-page">
       <PageHero
         compact
-        eyebrow="All Products"
-        title="Shop"
-        subtitle="Explore the full VELA collection — essentials designed to last beyond the season."
+        eyebrow="Semua Produk"
+        title="Toko"
+        subtitle="Jelajahi koleksi lengkap VELA — pakaian esensial yang dirancang untuk bertahan melewati musim."
       />
 
       <section className="shop-page__content">
@@ -64,7 +67,7 @@ export default function ShopPage() {
           </select>
         </div>
 
-        <p className="shop-page__count">{filtered.length} items</p>
+        <p className="shop-page__count">{filtered.length} produk</p>
 
         <div className="shop-grid__items shop-grid__items--page">
           {filtered.map((product, i) => (

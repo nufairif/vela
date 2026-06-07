@@ -4,41 +4,121 @@ import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { loginPath } from '../utils/auth'
 import { formatPrice, getShippingCost } from '../utils/currency'
-import { addOrder } from '../utils/userData'
+import { addOrder, loadAddresses } from '../utils/userData'
 import { createTrackingForOrder } from '../utils/tracking'
+import { validatePromo, applyPromo } from '../utils/promo'
+import { getMaxQty } from '../utils/inventory'
+import { usePageSeo } from '../hooks/usePageSeo'
 import PageHero from '../components/ui/PageHero'
 import ScrollReveal from '../components/ui/ScrollReveal'
 
 const paymentMethods = [
-  { id: 'transfer', label: 'Bank Transfer', desc: 'BCA · Mandiri · BNI' },
+  { id: 'transfer', label: 'Transfer Bank', desc: 'BCA · Mandiri · BNI' },
   { id: 'ewallet', label: 'E-Wallet', desc: 'GoPay · OVO · DANA' },
-  { id: 'cod', label: 'Cash on Delivery', desc: 'Jakarta area only' },
+  { id: 'cod', label: 'Bayar di Tempat', desc: 'Area Jakarta saja' },
 ]
+
+const regionLabels = {
+  jakarta: 'Jakarta & sekitarnya (1–2 hari)',
+  java: 'Pulau Jawa (2–4 hari)',
+  outer: 'Luar Jawa (4–7 hari)',
+}
 
 function generateOrderId() {
   return `VELA-${Date.now().toString(36).toUpperCase()}`
 }
 
+function splitName(fullName) {
+  const parts = fullName.trim().split(' ')
+  return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') }
+}
+
 export default function CheckoutPage() {
   const { isLoggedIn, user } = useAuth()
   const { items, subtotal, updateQty, removeItem, clearCart } = useCart()
-  const [region, setRegion] = useState('jakarta')
+  const savedAddresses = useMemo(
+    () => (user?.email ? loadAddresses(user.email) : []),
+    [user?.email]
+  )
+  const defaultAddress = savedAddresses.find((a) => a.isDefault) || savedAddresses[0]
+
+  const [addressMode, setAddressMode] = useState(defaultAddress ? 'saved' : 'manual')
+  const [selectedAddressId, setSelectedAddressId] = useState(defaultAddress?.id || '')
+  const [region, setRegion] = useState(defaultAddress?.region || 'jakarta')
   const [payment, setPayment] = useState('transfer')
+  const [promoInput, setPromoInput] = useState('')
+  const [appliedPromo, setAppliedPromo] = useState(null)
+  const [promoError, setPromoError] = useState('')
   const [order, setOrder] = useState(null)
 
-  const shipping = useMemo(
+  usePageSeo('Checkout', 'Selesaikan pesanan Anda di VELA.')
+
+  const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId)
+
+  const shippingBase = useMemo(
     () => getShippingCost(subtotal, region),
     [subtotal, region]
   )
-  const total = subtotal + shipping
+
+  const { discount, shipping } = useMemo(
+    () => applyPromo(appliedPromo, { subtotal, shipping: shippingBase }),
+    [appliedPromo, subtotal, shippingBase]
+  )
+
+  const total = subtotal - discount + shipping
+
+  const handleApplyPromo = () => {
+    const result = validatePromo(promoInput, subtotal)
+    if (!result.ok) {
+      setPromoError(result.error)
+      setAppliedPromo(null)
+      return
+    }
+    setPromoError('')
+    setAppliedPromo(result.promo)
+  }
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null)
+    setPromoInput('')
+    setPromoError('')
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
     const form = new FormData(e.target)
     const orderDate = new Date().toISOString().split('T')[0]
-    const city = form.get('city')
-    const firstName = form.get('firstName')
-    const lastName = form.get('lastName')
+
+    let customer
+    if (addressMode === 'saved' && selectedAddress) {
+      const { firstName, lastName } = splitName(selectedAddress.name)
+      customer = {
+        firstName,
+        lastName,
+        email: user.email,
+        phone: selectedAddress.phone,
+        address: selectedAddress.street,
+        city: selectedAddress.city,
+        postal: selectedAddress.postal,
+        notes: form.get('notes') || '',
+        name: selectedAddress.name,
+        addressId: selectedAddress.id,
+      }
+    } else {
+      const firstName = form.get('firstName')
+      const lastName = form.get('lastName')
+      customer = {
+        firstName,
+        lastName,
+        email: form.get('email'),
+        phone: form.get('phone'),
+        address: form.get('address'),
+        city: form.get('city'),
+        postal: form.get('postal'),
+        notes: form.get('notes'),
+        name: `${firstName} ${lastName}`.trim(),
+      }
+    }
 
     const savedOrder = {
       id: generateOrderId(),
@@ -53,38 +133,24 @@ export default function CheckoutPage() {
         price: item.product.price,
       })),
       subtotal,
+      discount,
+      promo: appliedPromo?.code || null,
       shipping,
       total,
       region,
       payment,
-      customer: {
-        firstName,
-        lastName,
-        email: form.get('email'),
-        phone: form.get('phone'),
-        address: form.get('address'),
-        city,
-        postal: form.get('postal'),
-        notes: form.get('notes'),
-        name: `${firstName} ${lastName}`.trim(),
-      },
+      customer,
       tracking: createTrackingForOrder({
         status: 'processing',
         orderDate,
         origin: 'Jakarta Selatan',
-        destination: city,
-        receiverName: `${firstName} ${lastName}`.trim(),
+        destination: customer.city,
+        receiverName: customer.name,
       }),
     }
 
     addOrder(user.email, savedOrder)
-
-    const snapshot = {
-      ...savedOrder,
-      items: [...items],
-    }
-
-    setOrder(snapshot)
+    setOrder({ ...savedOrder, items: [...items] })
     clearCart()
     window.scrollTo(0, 0)
   }
@@ -95,17 +161,17 @@ export default function CheckoutPage() {
         <section className="checkout-success">
           <ScrollReveal>
             <span className="checkout-success__icon">✓</span>
-            <h1>Order confirmed</h1>
-            <p>Thank you, {order.customer.firstName}. We have received your order.</p>
-            <p className="checkout-success__id">Order #{order.id}</p>
+            <h1>Pesanan dikonfirmasi</h1>
+            <p>Terima kasih, {order.customer.firstName}. Pesanan Anda telah kami terima.</p>
+            <p className="checkout-success__id">Pesanan #{order.id}</p>
             <p className="checkout-success__email">
-              A confirmation email will be sent to {order.customer.email}.
+              Konfirmasi akan dikirim ke {order.customer.email}.
             </p>
           </ScrollReveal>
 
           <ScrollReveal delay={0.1}>
             <div className="checkout-success__summary">
-              <h2>Order summary</h2>
+              <h2>Ringkasan pesanan</h2>
               <ul>
                 {order.items.map((item) => (
                   <li key={item.key}>
@@ -114,9 +180,15 @@ export default function CheckoutPage() {
                   </li>
                 ))}
               </ul>
+              {order.discount > 0 && (
+                <div className="checkout-summary__row checkout-summary__row--discount">
+                  <span>Diskon{order.promo ? ` (${order.promo})` : ''}</span>
+                  <span>−{formatPrice(order.discount)}</span>
+                </div>
+              )}
               <div className="checkout-summary__row">
-                <span>Shipping</span>
-                <span>{order.shipping === 0 ? 'Free' : formatPrice(order.shipping)}</span>
+                <span>Ongkir</span>
+                <span>{order.shipping === 0 ? 'Gratis' : formatPrice(order.shipping)}</span>
               </div>
               <div className="checkout-summary__row checkout-summary__row--total">
                 <span>Total</span>
@@ -130,7 +202,7 @@ export default function CheckoutPage() {
               <Link to={`/account/orders/${order.id}/track`} className="btn btn--primary">
                 Lacak Pesanan
               </Link>
-              <Link to="/shop" className="btn btn--ghost">Continue Shopping</Link>
+              <Link to="/shop" className="btn btn--ghost">Lanjut Belanja</Link>
             </div>
           </ScrollReveal>
         </section>
@@ -139,7 +211,6 @@ export default function CheckoutPage() {
   }
 
   if (!isLoggedIn) return <Navigate to={loginPath('/checkout')} replace />
-
   if (items.length === 0) return <Navigate to="/shop" replace />
 
   const nameParts = user.name.split(' ')
@@ -150,74 +221,138 @@ export default function CheckoutPage() {
     <div className="page checkout-page">
       <PageHero
         compact
-        eyebrow="Secure Checkout"
+        eyebrow="Checkout Aman"
         title="Checkout"
-        subtitle="Review your bag and complete your order."
+        subtitle="Periksa keranjang dan selesaikan pesanan Anda."
       />
 
       <div className="checkout-page__layout">
         <form className="checkout-form" onSubmit={handleSubmit}>
           <ScrollReveal>
             <section className="checkout-form__section">
-              <h2>Contact</h2>
-              <div className="checkout-form__row">
-                <label>
-                  First name
-                  <input type="text" name="firstName" required defaultValue={defaultFirstName} />
-                </label>
-                <label>
-                  Last name
-                  <input type="text" name="lastName" required defaultValue={defaultLastName} />
-                </label>
-              </div>
-              <div className="checkout-form__row">
-                <label>
-                  Email
-                  <input type="email" name="email" required defaultValue={user.email} />
-                </label>
-                <label>
-                  Phone
-                  <input type="tel" name="phone" required />
-                </label>
-              </div>
+              <h2>Kontak</h2>
+              {addressMode === 'saved' && selectedAddress ? (
+                <p className="checkout-form__hint">
+                  {selectedAddress.name} · {selectedAddress.phone} · {user.email}
+                </p>
+              ) : (
+                <>
+                  <div className="checkout-form__row">
+                    <label>
+                      Nama depan
+                      <input type="text" name="firstName" required defaultValue={defaultFirstName} />
+                    </label>
+                    <label>
+                      Nama belakang
+                      <input type="text" name="lastName" required defaultValue={defaultLastName} />
+                    </label>
+                  </div>
+                  <div className="checkout-form__row">
+                    <label>
+                      Email
+                      <input type="email" name="email" required defaultValue={user.email} />
+                    </label>
+                    <label>
+                      Telepon
+                      <input type="tel" name="phone" required />
+                    </label>
+                  </div>
+                </>
+              )}
             </section>
           </ScrollReveal>
 
           <ScrollReveal delay={0.05}>
             <section className="checkout-form__section">
-              <h2>Shipping address</h2>
+              <h2>Alamat pengiriman</h2>
+
+              {savedAddresses.length > 0 && (
+                <div className="checkout-address-mode">
+                  <button
+                    type="button"
+                    className={addressMode === 'saved' ? 'is-active' : ''}
+                    onClick={() => setAddressMode('saved')}
+                  >
+                    Alamat tersimpan
+                  </button>
+                  <button
+                    type="button"
+                    className={addressMode === 'manual' ? 'is-active' : ''}
+                    onClick={() => setAddressMode('manual')}
+                  >
+                    Alamat baru
+                  </button>
+                </div>
+              )}
+
+              {addressMode === 'saved' && savedAddresses.length > 0 ? (
+                <ul className="checkout-address-list">
+                  {savedAddresses.map((addr) => (
+                    <li key={addr.id}>
+                      <label className={`checkout-address-card${selectedAddressId === addr.id ? ' is-selected' : ''}`}>
+                        <input
+                          type="radio"
+                          name="savedAddress"
+                          value={addr.id}
+                          checked={selectedAddressId === addr.id}
+                          onChange={() => {
+                            setSelectedAddressId(addr.id)
+                            setRegion(addr.region)
+                          }}
+                        />
+                        <div>
+                          <strong>{addr.label}</strong>
+                          {addr.isDefault && <span className="checkout-address-card__badge">Utama</span>}
+                          <p>{addr.name} · {addr.phone}</p>
+                          <p>{addr.street}</p>
+                          <p>{addr.city}, {addr.postal}</p>
+                          <small>{regionLabels[addr.region]}</small>
+                        </div>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <>
+                  <label>
+                    Alamat lengkap
+                    <input type="text" name="address" required />
+                  </label>
+                  <div className="checkout-form__row">
+                    <label>
+                      Kota
+                      <input type="text" name="city" required />
+                    </label>
+                    <label>
+                      Kode pos
+                      <input type="text" name="postal" required />
+                    </label>
+                  </div>
+                  <label>
+                    Wilayah
+                    <select value={region} onChange={(e) => setRegion(e.target.value)}>
+                      <option value="jakarta">{regionLabels.jakarta}</option>
+                      <option value="java">{regionLabels.java}</option>
+                      <option value="outer">{regionLabels.outer}</option>
+                    </select>
+                  </label>
+                </>
+              )}
+
               <label>
-                Street address
-                <input type="text" name="address" required />
+                Catatan pesanan <span className="checkout-form__optional">(opsional)</span>
+                <textarea name="notes" rows={3} placeholder="Instruksi pengiriman, pesan hadiah..." />
               </label>
-              <div className="checkout-form__row">
-                <label>
-                  City
-                  <input type="text" name="city" required />
-                </label>
-                <label>
-                  Postal code
-                  <input type="text" name="postal" required />
-                </label>
-              </div>
-              <label>
-                Region
-                <select value={region} onChange={(e) => setRegion(e.target.value)}>
-                  <option value="jakarta">Jakarta & surrounding (1–2 days)</option>
-                  <option value="java">Java (2–4 days)</option>
-                  <option value="outer">Outside Java (4–7 days)</option>
-                </select>
-              </label>
-              <label>
-                Order notes <span className="checkout-form__optional">(optional)</span>
-                <textarea name="notes" rows={3} placeholder="Delivery instructions, gift message..." />
-              </label>
+
+              <Link to="/account/addresses" className="checkout-form__link">
+                Kelola alamat tersimpan
+              </Link>
             </section>
           </ScrollReveal>
 
-          <ScrollReveal delay={0.1}>
+          <ScrollReveal delay={0.08}>
             <section className="checkout-form__section">
-              <h2>Payment</h2>
+              <h2>Pembayaran</h2>
               <div className="checkout-payment">
                 {paymentMethods.map((m) => (
                   <label key={m.id} className={`checkout-payment__option ${payment === m.id ? 'is-active' : ''}`}>
@@ -239,63 +374,102 @@ export default function CheckoutPage() {
           </ScrollReveal>
 
           <button type="submit" className="btn btn--primary checkout-form__submit">
-            Place Order · {formatPrice(total)}
+            Buat Pesanan · {formatPrice(total)}
           </button>
         </form>
 
         <aside className="checkout-summary">
           <ScrollReveal>
-            <h2>Your bag</h2>
+            <h2>Keranjang Anda</h2>
             <ul className="checkout-summary__items">
-              {items.map((item) => (
-                <li key={item.key} className="checkout-summary__item">
-                  <img src={item.product.image} alt={item.product.name} />
-                  <div className="checkout-summary__info">
-                    <Link to={`/products/${item.product.id}`}>{item.product.name}</Link>
-                    <small>{[item.color, item.size].filter(Boolean).join(' · ')}</small>
-                    <div className="checkout-summary__qty">
+              {items.map((item) => {
+                const maxQty = getMaxQty(item.product.id, item.size, item.color)
+                return (
+                  <li key={item.key} className="checkout-summary__item">
+                    <img src={item.product.image} alt={item.product.name} />
+                    <div className="checkout-summary__info">
+                      <Link to={`/products/${item.product.id}`}>{item.product.name}</Link>
+                      <small>{[item.color, item.size].filter(Boolean).join(' · ')}</small>
+                      {maxQty <= 5 && maxQty > 0 && (
+                        <small className="checkout-summary__stock">Stok tersisa {maxQty}</small>
+                      )}
+                      <div className="checkout-summary__qty">
+                        <button
+                          type="button"
+                          onClick={() => updateQty(item.key, item.qty - 1)}
+                          aria-label="Kurangi jumlah"
+                        >
+                          −
+                        </button>
+                        <span>{item.qty}</span>
+                        <button
+                          type="button"
+                          onClick={() => updateQty(item.key, item.qty + 1)}
+                          disabled={item.qty >= maxQty}
+                          aria-label="Tambah jumlah"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                    <div className="checkout-summary__price">
+                      <span>{formatPrice(item.product.price * item.qty)}</span>
                       <button
                         type="button"
-                        onClick={() => updateQty(item.key, item.qty - 1)}
-                        aria-label="Decrease quantity"
+                        className="checkout-summary__remove"
+                        onClick={() => removeItem(item.key)}
                       >
-                        −
-                      </button>
-                      <span>{item.qty}</span>
-                      <button
-                        type="button"
-                        onClick={() => updateQty(item.key, item.qty + 1)}
-                        aria-label="Increase quantity"
-                      >
-                        +
+                        Hapus
                       </button>
                     </div>
-                  </div>
-                  <div className="checkout-summary__price">
-                    <span>{formatPrice(item.product.price * item.qty)}</span>
-                    <button
-                      type="button"
-                      className="checkout-summary__remove"
-                      onClick={() => removeItem(item.key)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
+
+            <div className="checkout-promo">
+              <div className="checkout-promo__row">
+                <input
+                  type="text"
+                  placeholder="Kode promo"
+                  value={promoInput}
+                  onChange={(e) => setPromoInput(e.target.value)}
+                  disabled={!!appliedPromo}
+                />
+                {appliedPromo ? (
+                  <button type="button" className="btn btn--ghost" onClick={handleRemovePromo}>
+                    Hapus
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn--ghost" onClick={handleApplyPromo}>
+                    Pakai
+                  </button>
+                )}
+              </div>
+              {promoError && <p className="checkout-promo__error">{promoError}</p>}
+              {appliedPromo && (
+                <p className="checkout-promo__applied">{appliedPromo.label} diterapkan</p>
+              )}
+              <p className="checkout-promo__hint">Coba: VELA10, GRATISONGKIR, HEMAT50K</p>
+            </div>
 
             <div className="checkout-summary__row">
               <span>Subtotal</span>
               <span>{formatPrice(subtotal)}</span>
             </div>
+            {discount > 0 && (
+              <div className="checkout-summary__row checkout-summary__row--discount">
+                <span>Diskon</span>
+                <span>−{formatPrice(discount)}</span>
+              </div>
+            )}
             <div className="checkout-summary__row">
-              <span>Shipping</span>
-              <span>{shipping === 0 ? 'Free' : formatPrice(shipping)}</span>
+              <span>Ongkir</span>
+              <span>{shipping === 0 ? 'Gratis' : formatPrice(shipping)}</span>
             </div>
-            {subtotal < 500000 && (
+            {subtotal < 500000 && !appliedPromo && (
               <p className="checkout-summary__note">
-                Free shipping on orders over Rp 500,000
+                Gratis ongkir untuk pesanan di atas Rp 500.000
               </p>
             )}
             <div className="checkout-summary__row checkout-summary__row--total">
